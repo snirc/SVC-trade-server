@@ -65,8 +65,9 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 			AbstractVerticle verticle = (AbstractVerticle) ctClass.getDeclaredConstructor().newInstance();
 			AppConfig.AppParameters.put("APP", "trade-server");
 			AppConfig.AppParameters.put("PORT", "8181");
-			AppConfig.AppParameters.put("MONGO", "mongo-local");
-			//AppConfig.AppParameters.put("MONGO", "mongo-atlas");
+			//AppConfig.AppParameters.put("MONGO", "mongo-local");
+			AppConfig.AppParameters.put("MONGO", "mongo-atlas");
+			AppConfig.AppParameters.put("MONGO_PORT", "8087");;
 			System.out.println("Found Vertical: " + ctClass.getName());			
 			AppConfig.runVerticle(verticle);
 		} catch (Exception e) {

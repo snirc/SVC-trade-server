@@ -3,9 +3,12 @@ package snir.code.services.otcmarkets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.hazelcast.client.impl.protocol.codec.DynamicConfigAddCountDownLatchConfigCodec;
 
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
@@ -25,9 +28,15 @@ public class StockScreener {
 	public static MongoLayer mongoLayer = null;
 	public static String OTC_STOCK_COLLECTION = "OTC_Stock";
 	public static String OTC_STOCK_MOVEMENT = "OTC_Stock_Movement";
-	private static long PERIODIC = 60000 * 1;
+	public static String OTC_STOCK_ACTIVITY = "OTC_Stock_Activities";
+	private static long PERIODIC = 60000 * 2;
+	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
 	public StockScreener() {
+
+		STOCK_LIST_TAG_NAME.put(OTC_STOCK_COLLECTION, "stocks");
+		STOCK_LIST_TAG_NAME.put(OTC_STOCK_ACTIVITY, "records");
+
 		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
 			try {
 				setMongoApi(instance);
@@ -43,14 +52,52 @@ public class StockScreener {
 		mongoLayer = instance;
 		mongoLayer.createCollection(OTC_STOCK_COLLECTION);
 		mongoLayer.createCollection(OTC_STOCK_MOVEMENT);
-		long timerID = AppConfig.vertx.setPeriodic(PERIODIC, new Handler<Long>() {
+		mongoLayer.createCollection(OTC_STOCK_ACTIVITY);
+
+		/*
+		 * //System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
+		 * System.out.println("Run Activ stock scan: " + DateUtils.getLastDateTime());
+		 * //runStockScan(); scanActivityStocks("/otcapi/market-data/active/current");
+		 * scanActivityStocks("/otcapi/market-data/advancers/current");
+		 * scanActivityStocks("/otcapi/market-data/decliners/current");
+		 */
+		
+		AppConfig.vertx.setPeriodic(PERIODIC, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
-				System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
-				runStockScan();
+				System.out.println("Run Activ stock scan: " + DateUtils.getLastDateTime());
+				//runStockScan();
+				scanActivityStocks("/otcapi/market-data/active/current");
+				
 			}
+			
 		});
+		
+		AppConfig.vertx.setPeriodic(PERIODIC+2000, new Handler<Long>() {
+
+			@Override
+			public void handle(Long aLong) {
+				System.out.println("Run advancers stock scan: " + DateUtils.getLastDateTime());
+				
+				scanActivityStocks("/otcapi/market-data/advancers/current");
+				
+			}
+			
+		});
+		
+		AppConfig.vertx.setPeriodic(PERIODIC+4000, new Handler<Long>() {
+
+			@Override
+			public void handle(Long aLong) {
+				System.out.println("Run decliners stock scan: " + DateUtils.getLastDateTime());
+				
+				scanActivityStocks("/otcapi/market-data/decliners/current");
+				
+			}
+			
+		});
+
 	}
 
 	/**
@@ -71,7 +118,20 @@ public class StockScreener {
 		client.get(443, url, uri)
 				// .addQueryParam("market", "10")
 				.addQueryParam("pageSize", "100000").ssl(true).send()
-				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString())))
+				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString()), OTC_STOCK_COLLECTION))
+				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
+	}
+
+	public void scanActivityStocks(String activity) {
+		// Request URL:
+		// https://backend.otcmarkets.com/otcapi/market-data/active/current?page=1&pageSize=10
+
+		String url = "backend.otcmarkets.com";
+		String uri = activity;
+		WebClient client = WebClient.create(AppConfig.vertx);
+
+		client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send()
+				.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), OTC_STOCK_ACTIVITY))
 				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
 	}
 
@@ -79,14 +139,14 @@ public class StockScreener {
 	 * 
 	 * @param stockBody
 	 */
-	public void setStock(JsonObject stockBody) {
+	public void setStock(JsonObject stockBody, String dbCollection) {
 		Map<String, JsonObject> dbStockMap = new HashMap<String, JsonObject>();
-		Single<List<JsonObject>> dbStocks = mongoLayer.find(OTC_STOCK_COLLECTION);
+		Single<List<JsonObject>> dbStocks = mongoLayer.find(dbCollection);
 		dbStocks.subscribe(dbStockList -> {
 			dbStockList.forEach(dbStockItem -> {
 				dbStockMap.put(dbStockItem.getString("_id"), dbStockItem);
 			});
-			setStock(stockBody, dbStockMap);
+			setStock(stockBody, dbStockMap, dbCollection);
 		});
 
 	}
@@ -96,30 +156,38 @@ public class StockScreener {
 	 * @param stockBody
 	 * @param dbStockMap
 	 */
-	public void setStock(JsonObject stockBody, Map<String, JsonObject> dbStockMap) {
+	public void setStock(JsonObject stockBody, Map<String, JsonObject> dbStockMap, String dbCollection) {
 
-		stockBody.getJsonArray("stocks").forEach(item -> {
+		AtomicReference<Integer> counter = new AtomicReference<>(1);
+		stockBody.getJsonArray(STOCK_LIST_TAG_NAME.get(dbCollection)).forEach(item -> {
+			int delay = counter.getAndUpdate(value -> value + 1);
+			AppConfig.vertx.setTimer(delay, l -> {
+				JsonObject stock = (JsonObject) item;
+				String stockId = stock.getString("symbol");
+				stock.put("_id", stockId);
+				stock.put("updated", DateUtils.getLastDateTime());
+				JsonObject dbStock = dbStockMap.get(stockId);
+				if (dbStock == null) {
+					System.out.println("There is a new stock.... ");
+					mongoLayer.insertingDocuments(dbCollection, stock);
+				} else
+					checkStockCheng(stock, dbStock, dbCollection);
 
-			JsonObject stock = (JsonObject) item;
-			String stockId = stock.getString("securityName");
-			stock.put("_id", stockId);
-			stock.put("updated", DateUtils.getLastDateTime());
-			JsonObject dbStock = dbStockMap.get(stockId);
-			if (dbStock == null)
-				mongoLayer.insertingDocuments(OTC_STOCK_COLLECTION, stock);
-			else
-				checkStockCheng(stock, dbStock);
-
+			});
 		});
+
 	}
 
-	public void checkStockCheng(JsonObject stock, JsonObject dbStock) {
+	public void checkStockCheng(JsonObject stock, JsonObject dbStock, String dbCollection) {
 		double stockPrice = stock.getDouble("price");
 		double dbStockPrice = dbStock.getDouble("price");
 		double diff = stockPrice - dbStockPrice;
+
 		if (diff != 0) {
-			mongoLayer.replaceDocuments(OTC_STOCK_COLLECTION, stock, stock.getString("_id"));
-			buySellStock(stock, diff);
+			System.out.println("There is an update for stock: "+ dbStock.getString("_id") +" - "+ diff);
+			mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
+			if (dbCollection != OTC_STOCK_COLLECTION)
+				buySellStock(stock, diff);
 		}
 
 	}
@@ -132,16 +200,23 @@ public class StockScreener {
 	private void buySellStock(JsonObject stock, double diff) {
 		Single<JsonObject> movementStock = mongoLayer.findById(OTC_STOCK_MOVEMENT, stock.getString("_id"));
 		movementStock.subscribe(mStock -> {
-			String action = mStock == null ? null : mStock.getString("action");
-			String newAction = null;
-			if (diff > 0 && !"buy".equals(action)) {
-				newAction = "buy";
-				stock.put("action", newAction);
-			} else if (diff < 0 && "buy".equals(action)) {
-				newAction = "sall";
-				stock.put("action", newAction);
+			if (mStock == null)
+				updateMovmentStock(stock, diff, mStock, null);
+			else if (mStock.getDouble("price") != stock.getDouble("price")) {
+				String action = mStock == null ? null : mStock.getString("action");
+				String newAction = null;
+				if (diff > 0 && !"buy".equals(action)) {
+					newAction = "buy";
+					mStock.put("buyPrice", stock.getDouble("price"));
+					mStock.put("action", newAction);
+				} else if (diff < 0 && "buy".equals(action)) {
+					newAction = "sell";
+					mStock.put("action", newAction);
+					mStock.put("sellPrice", stock.getDouble("price"));
+				}
+				updateMovmentStock(stock, diff, mStock, newAction);
 			}
-			updateMovmentStock(stock, diff, mStock, newAction);
+
 		});
 
 	}
@@ -161,7 +236,7 @@ public class StockScreener {
 					: mStock.getJsonArray("history");
 			JsonObject updateSetock = new JsonObject();
 			updateSetock.put("price", stock.getDouble("price"));
-			updateSetock.put("volumeChange", stock.getDouble("volumeChange"));
+		//	updateSetock.put("volumeChange", stock.getDouble("volumeChange"));
 			updateSetock.put("AppMovement", diff);
 			updateSetock.put("updated", updateTime);
 			if (newAction != null) {
@@ -187,17 +262,22 @@ public class StockScreener {
 	}
 
 	private JsonObject getStockAsJson(String stockResult) {
-		stockResult = stockResult.replaceAll("\\\\", "");
-		stockResult = stockResult.replaceAll(" \"", "\"");
-		stockResult = stockResult.replaceFirst("\"", "");
-		stockResult = stockResult.replaceAll("}\"", "}");
+		try {
+			stockResult = stockResult.replaceAll("\\\\", "");
+			stockResult = stockResult.replaceAll(" \"", "\"");
+			stockResult = stockResult.replaceFirst("\"", "");
+			stockResult = stockResult.replaceAll("}\"", "}");
 
-		JsonObject resultObj = new JsonObject(stockResult);
+			JsonObject resultObj = new JsonObject(stockResult);
 
-		int size = resultObj.getJsonArray("stocks").size();
-		resultObj.put("size", size);
+			int size = resultObj.getJsonArray("stocks").size();
+			resultObj.put("size", size);
 
-		return resultObj;
+			return resultObj;
+		} catch (Exception e) {
+			MessageLog.logError(MessageKey.GET_DB_STOCK_ERROR, stockResult, logger, e);
+		}
+		return new JsonObject();
 	}
 
 	private void sendStockResult(RoutingContext ctx, JsonObject stockResponcs) {
