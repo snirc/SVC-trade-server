@@ -31,7 +31,8 @@ public class StocksNews {
 
 		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
 			try {
-				setMongoApi(instance);
+				mongoLayer = instance;
+				runScunPeriodic();
 			} catch (Exception e) {
 				// TODO: maybe fail start promise we can't get log mongo instance
 //				startPromise.fail(e);
@@ -40,8 +41,8 @@ public class StocksNews {
 
 	}
 
-	private void setMongoApi(MongoLayer instance) {
-		mongoLayer = instance;
+	private void runScunPeriodic() {
+		
 		mongoLayer.createCollection(OTC_NEWS_COLLECTION);
 		mongoLayer.createCollection(OTC_STOCK_FINANCIAL_REPORTS);
 		mongoLayer.createCollection(OTC_STOCK_SEC_FILINGS);
@@ -106,7 +107,7 @@ public class StocksNews {
 			Single<JsonObject> dataStocks = mongoLayer.findById(dbCollection, stock.getString("_id"));
 			dataStocks.subscribe(dbStock -> {
 				if (dbStock == null) { 
-					System.out.println("There is a new stock news.... ");
+					System.out.println("There is a new stock news.... "+stockId);
 					mongoLayer.insertingDocuments(dbCollection, stock);
 				}
 				else {
@@ -123,7 +124,7 @@ public class StocksNews {
 		
 		if((stock.getString("title") != null && !stock.getString("title").equals(dbStock.getString("title"))) || 
 						(stock.getString("secFileNo") != null && !stock.getString("secFileNo").equals(dbStock.getString("secFileNo")))) {
-			System.out.println("There is an update stock news.... ");
+			System.out.println("There is an update stock news.... "+stock.getString("_id"));
 			JsonArray history = dbStock.getJsonArray("history");
 			history = history == null ? new JsonArray() : history;
 			history.add(dbStock);

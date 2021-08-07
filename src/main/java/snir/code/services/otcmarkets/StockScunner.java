@@ -22,7 +22,7 @@ import snir.code.db.MongoLayer;
 import snir.code.utils.DateUtils;
 import snir.code.utils.MessageLog;
 
-public class StockScreener {
+public class StockScunner {
 
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
 	public static MongoLayer mongoLayer = null;
@@ -32,14 +32,15 @@ public class StockScreener {
 	private static long PERIODIC = 60000 * 7;
 	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
-	public StockScreener() {
+	public StockScunner() {
 
 		STOCK_LIST_TAG_NAME.put(OTC_STOCK_COLLECTION, "stocks");
 		STOCK_LIST_TAG_NAME.put(OTC_STOCK_ACTIVITY, "records");
 
 		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
 			try {
-				setMongoApi(instance);
+				mongoLayer = instance;
+				runScunner();
 			} catch (Exception e) {
 				// TODO: maybe fail start promise we can't get log mongo instance
 //				startPromise.fail(e);
@@ -48,8 +49,7 @@ public class StockScreener {
 
 	}
 
-	private void setMongoApi(MongoLayer instance) {
-		mongoLayer = instance;
+	private void runScunner() {
 		mongoLayer.createCollection(OTC_STOCK_COLLECTION);
 		mongoLayer.createCollection(OTC_STOCK_MOVEMENT);
 		mongoLayer.createCollection(OTC_STOCK_ACTIVITY);
@@ -117,7 +117,7 @@ public class StockScreener {
 	 */
 	public void getStock(RoutingContext ctx) {
 
-		MessageLog.sendMessageCode(ctx, MessageKey.GET_STOCK_SUCCESS, logger);
+		MessageLog.sendMessageCode(ctx, MessageKey.GET_STOCK_SUCCESS, "OK");
 
 	}
 
