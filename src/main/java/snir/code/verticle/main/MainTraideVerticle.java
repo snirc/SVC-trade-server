@@ -3,6 +3,8 @@ package snir.code.verticle.main;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sun.tools.classfile.StackMap_attribute.stack_map_frame;
+
 import io.vertx.core.AbstractVerticle;
 import snir.code.config.AppConfig;
 import snir.code.config.MessageConfig.MessageKey;
@@ -10,6 +12,7 @@ import snir.code.db.MongoLayer;
 import snir.code.services.CommonService;
 import snir.code.services.MainService;
 import snir.code.services.otcmarkets.StockScreener;
+import snir.code.services.otcmarkets.StocksNews;
 import snir.code.utils.MessageLog;
 
 
@@ -19,6 +22,7 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 	private CommonService commonService;
 	private MainService mainService;
 	private StockScreener stockScreener;
+	private StocksNews stocksNews;
 	
 	@Override
 	protected void loadRouter() throws Exception {
@@ -40,6 +44,7 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 		
 		mainService = new MainService();
 		stockScreener = new StockScreener();
+		stocksNews = new StocksNews();
 		
 	}
 

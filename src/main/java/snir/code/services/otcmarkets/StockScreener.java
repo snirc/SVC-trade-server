@@ -29,7 +29,7 @@ public class StockScreener {
 	public static String OTC_STOCK_COLLECTION = "OTC_Stock";
 	public static String OTC_STOCK_MOVEMENT = "OTC_Stock_Movement";
 	public static String OTC_STOCK_ACTIVITY = "OTC_Stock_Activities";
-	private static long PERIODIC = 60000 * 2;
+	private static long PERIODIC = 60000 * 7;
 	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
 	public StockScreener() {
@@ -98,6 +98,17 @@ public class StockScreener {
 			
 		});
 
+		AppConfig.vertx.setPeriodic(PERIODIC*4, new Handler<Long>() {
+
+			@Override
+			public void handle(Long aLong) {
+				System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
+				//runStockScan();
+				runStockScan();
+				
+			}
+			
+		});
 	}
 
 	/**
@@ -166,6 +177,7 @@ public class StockScreener {
 				String stockId = stock.getString("symbol");
 				stock.put("_id", stockId);
 				stock.put("updated", DateUtils.getLastDateTime());
+				stock.put("updatedMill", System.currentTimeMillis());
 				JsonObject dbStock = dbStockMap.get(stockId);
 				if (dbStock == null) {
 					System.out.println("There is a new stock.... ");
@@ -232,6 +244,7 @@ public class StockScreener {
 			mStock.put("volumeChange", stock.getDouble("volumeChange"));
 			mStock.put("AppMovement", diff);
 			mStock.put("updated", updateTime);
+			mStock.put("updatedMill", System.currentTimeMillis());
 			JsonArray historyUpdate = mStock.getJsonArray("history") == null ? new JsonArray()
 					: mStock.getJsonArray("history");
 			JsonObject updateSetock = new JsonObject();
@@ -239,6 +252,7 @@ public class StockScreener {
 		//	updateSetock.put("volumeChange", stock.getDouble("volumeChange"));
 			updateSetock.put("AppMovement", diff);
 			updateSetock.put("updated", updateTime);
+			updateSetock.put("updatedMill", System.currentTimeMillis());
 			if (newAction != null) {
 				stock.put("action", newAction);
 				mStock.put("action", newAction);
