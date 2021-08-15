@@ -13,32 +13,25 @@ import snir.code.config.AppConfig;
 import snir.code.config.MessageConfig.MessageKey;
 import snir.code.db.MongoLayer;
 import snir.code.utils.MessageLog;
+import snir.code.utils.MongoCollections;
 
 public class SearchStocksDb {
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
-	public static MongoLayer mongoLayer = null;
 	ArrayList<String> searchCollections = new ArrayList<String>();
 	JsonObject searchCollectionsQueries = new JsonObject();
 	
 	public SearchStocksDb() {
 		
-		searchCollections.add(StockScunner.OTC_STOCK_COLLECTION);
-		searchCollections.add(StockScunner.OTC_STOCK_ACTIVITY);
-		searchCollections.add(StockScunner.OTC_STOCK_MOVEMENT);
-		searchCollections.add(StocksNews.OTC_NEWS_COLLECTION);
-		searchCollections.add(StocksNews.OTC_STOCK_FINANCIAL_REPORTS);
-		searchCollections.add(StocksNews.OTC_STOCK_SEC_FILINGS);
+		searchCollections.add(MongoCollections.OTC_STOCK_COLLECTION);
+		searchCollections.add(MongoCollections.OTC_STOCK_ACTIVITY);
+		searchCollections.add(MongoCollections.OTC_STOCK_MOVEMENT);
+		searchCollections.add(MongoCollections.OTC_NEWS_COLLECTION);
+		searchCollections.add(MongoCollections.OTC_STOCK_FINANCIAL_REPORTS);
+		searchCollections.add(MongoCollections.OTC_STOCK_SEC_FILINGS);
 		
 		setLikeQueries();
 		
-		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
-			try {
-				mongoLayer = instance;
-			} catch (Exception e) {
-				// TODO: maybe fail start promise we can't get log mongo instance
-//				startPromise.fail(e);
-			}
-		});
+		
 	}
 	
 	
@@ -46,17 +39,17 @@ public class SearchStocksDb {
 	private void setLikeQueries() {
 		JsonObject otcstockCollection = new JsonObject();
 		otcstockCollection.put("securityName", "");
-		searchCollectionsQueries.put(StockScunner.OTC_STOCK_COLLECTION, otcstockCollection);
+		searchCollectionsQueries.put(MongoCollections.OTC_STOCK_COLLECTION, otcstockCollection);
 		
-		searchCollectionsQueries.put(StockScunner.OTC_STOCK_ACTIVITY, new JsonObject().put("tierName", ""));
+		searchCollectionsQueries.put(MongoCollections.OTC_STOCK_ACTIVITY, new JsonObject().put("tierName", ""));
 		
 		JsonObject otcNewsCollection = new JsonObject();
 		otcNewsCollection.put("title", "");
 		
-		searchCollectionsQueries.put(StocksNews.OTC_NEWS_COLLECTION, otcNewsCollection);
+		searchCollectionsQueries.put(MongoCollections.OTC_NEWS_COLLECTION, otcNewsCollection);
 		
-		searchCollectionsQueries.put(StocksNews.OTC_STOCK_FINANCIAL_REPORTS, new JsonObject().put("title", ""));
-		searchCollectionsQueries.put(StocksNews.OTC_STOCK_SEC_FILINGS, new JsonObject().put("companyName", ""));
+		searchCollectionsQueries.put(MongoCollections.OTC_STOCK_FINANCIAL_REPORTS, new JsonObject().put("title", ""));
+		searchCollectionsQueries.put(MongoCollections.OTC_STOCK_SEC_FILINGS, new JsonObject().put("companyName", ""));
 	}
 
 
@@ -73,9 +66,9 @@ public class SearchStocksDb {
 
 
 
-	private void searchBySymbol(RoutingContext ctx, JsonObject searchResultObject, String collection) {
+	public void searchBySymbol(RoutingContext ctx, JsonObject searchResultObject, String collection) {
 		
-		Single<JsonObject> searchResult = mongoLayer.findById(collection, ctx.pathParam("id"));
+		Single<JsonObject> searchResult = MongoCollections.mongoLayer.findById(collection, ctx.pathParam("id"));
 		searchResult.subscribe(result -> {
 			searchResultObject.put(collection, result);
 			if(searchResultObject.size() == searchCollections.size())
@@ -110,7 +103,7 @@ public class SearchStocksDb {
 
 	private void searchByLike(RoutingContext ctx, JsonObject searchResultObject, String collection,
 			JsonObject queryObject) {
-		Single<List<JsonObject>> results= mongoLayer.find(collection, queryObject);
+		Single<List<JsonObject>> results= MongoCollections.mongoLayer.find(collection, queryObject);
 		results.subscribe(allResults -> {
 			allResults.forEach(result->{
 				result.remove("history");

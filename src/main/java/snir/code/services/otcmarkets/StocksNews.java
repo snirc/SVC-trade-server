@@ -1,9 +1,5 @@
 package snir.code.services.otcmarkets;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,46 +10,30 @@ import io.vertx.ext.web.client.WebClient;
 import rx.Single;
 import snir.code.config.AppConfig;
 import snir.code.config.MessageConfig.MessageKey;
-import snir.code.db.MongoLayer;
 import snir.code.utils.DateUtils;
 import snir.code.utils.MessageLog;
+import snir.code.utils.MongoCollections;
 
 public class StocksNews {
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
-	public static MongoLayer mongoLayer = null;
-	public static String OTC_NEWS_COLLECTION = "OTC_Stock_News";
-	public static String OTC_STOCK_FINANCIAL_REPORTS = "OTC_Stock_Report";
-	public static String OTC_STOCK_SEC_FILINGS = "OTC_Stock_Sec_Filing";
-	private static long PERIODIC = 60000 * 1;
+	
+	
+	private static long PERIODIC = 60000 * 5;
 	private String STOCK_LIST_TAG_NAME = "records";
 
 	public StocksNews() {
-
-		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
-			try {
-				mongoLayer = instance;
-				runScunPeriodic();
-			} catch (Exception e) {
-				// TODO: maybe fail start promise we can't get log mongo instance
-//				startPromise.fail(e);
-			}
-		});
-
+		runScunPeriodic();
 	}
 
 	private void runScunPeriodic() {
 		
-		mongoLayer.createCollection(OTC_NEWS_COLLECTION);
-		mongoLayer.createCollection(OTC_STOCK_FINANCIAL_REPORTS);
-		mongoLayer.createCollection(OTC_STOCK_SEC_FILINGS);
-			
 		AppConfig.vertx.setPeriodic(PERIODIC, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
 				System.out.println("Run News stock scan: " + DateUtils.getLastDateTime());
 
-				scanNewsStocks("/otcapi/company/dns/tier/news", OTC_NEWS_COLLECTION);
+				scanNewsStocks("/otcapi/company/dns/tier/news", MongoCollections.OTC_NEWS_COLLECTION);
 
 			}
 
@@ -65,7 +45,7 @@ public class StocksNews {
 			public void handle(Long aLong) {
 				System.out.println("Run sec-filings stock scan: " + DateUtils.getLastDateTime());
 
-				scanNewsStocks("/otcapi/company/sec-filings", OTC_STOCK_SEC_FILINGS);
+				scanNewsStocks("/otcapi/company/sec-filings", MongoCollections.OTC_STOCK_SEC_FILINGS);
 
 			}
 
@@ -77,7 +57,7 @@ public class StocksNews {
 			public void handle(Long aLong) {
 				System.out.println("Run financial-report stock scan: " + DateUtils.getLastDateTime());
 
-				scanNewsStocks("/otcapi/company/financial-report", OTC_STOCK_FINANCIAL_REPORTS);
+				scanNewsStocks("/otcapi/company/financial-report", MongoCollections.OTC_STOCK_FINANCIAL_REPORTS);
 
 			}
 
@@ -104,11 +84,11 @@ public class StocksNews {
 			stock.put("_id", stockId);
 			stock.put("updated", DateUtils.getLastDateTime());
 			stock.put("updatedMill", System.currentTimeMillis());
-			Single<JsonObject> dataStocks = mongoLayer.findById(dbCollection, stock.getString("_id"));
+			Single<JsonObject> dataStocks = MongoCollections.mongoLayer.findById(dbCollection, stock.getString("_id"));
 			dataStocks.subscribe(dbStock -> {
 				if (dbStock == null) { 
 					System.out.println("There is a new stock news.... "+stockId);
-					mongoLayer.insertingDocuments(dbCollection, stock);
+					MongoCollections.mongoLayer.insertingDocuments(dbCollection, stock);
 				}
 				else {
 					checkStockCheng(stock, dbStock, dbCollection);
@@ -130,9 +110,29 @@ public class StocksNews {
 			history.add(dbStock);
 			stock.put("history", history);
 			dbStock.remove("history");
-			mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
+			MongoCollections.mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
+			
+			String newsMessage = stock.getString("title") != null ? stock.getString("title") : stock.getString("secFileNo");
+			addNewsAlert(stock.getString("_id"), newsMessage );
 		}
 		
 		
+	}
+
+	private void addNewsAlert(String id, String newsMessage) {
+		JsonObject newsAlertObj = new JsonObject();
+		newsAlertObj.put("_id", id);
+		newsAlertObj.put("title", newsMessage);
+		
+		Single<JsonObject> searchResult = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_COLLECTION, id);
+		searchResult.subscribe(result -> {
+			newsAlertObj.put("market", result.getString("market"));
+			newsAlertObj.put("price", result.getDouble("price"));
+			newsAlertObj.put("volume", result.getDouble("volume"));
+			newsAlertObj.put("volumeChange", result.getDouble("volumeChange"));
+			newsAlertObj.put("updated", DateUtils.getLastDateTime());
+			//newsAlertObj.put("updatedMill", System.currentTimeMillis());
+			MongoCollections.mongoLayer.insertingDocuments(MongoCollections.OTC_STOCK_NEWS_ALERTS, newsAlertObj);
+		});
 	}
 }

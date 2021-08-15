@@ -21,39 +21,24 @@ import snir.code.config.MessageConfig.MessageKey;
 import snir.code.db.MongoLayer;
 import snir.code.utils.DateUtils;
 import snir.code.utils.MessageLog;
+import snir.code.utils.MongoCollections;
 
 public class StockScunner {
 
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
-	public static MongoLayer mongoLayer = null;
-	public static String OTC_STOCK_COLLECTION = "OTC_Stock";
-	public static String OTC_STOCK_MOVEMENT = "OTC_Stock_Movement";
-	public static String OTC_STOCK_ACTIVITY = "OTC_Stock_Activities";
+	
 	private static long PERIODIC = 60000 * 11;
 	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
 	public StockScunner() {
 
-		STOCK_LIST_TAG_NAME.put(OTC_STOCK_COLLECTION, "stocks");
-		STOCK_LIST_TAG_NAME.put(OTC_STOCK_ACTIVITY, "records");
-
-		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance -> {
-			try {
-				mongoLayer = instance;
-				runScunner();
-			} catch (Exception e) {
-				// TODO: maybe fail start promise we can't get log mongo instance
-//				startPromise.fail(e);
-			}
-		});
-
+		STOCK_LIST_TAG_NAME.put(MongoCollections.OTC_STOCK_COLLECTION, "stocks");
+		STOCK_LIST_TAG_NAME.put(MongoCollections.OTC_STOCK_ACTIVITY, "records");
+		 runScunner();
 	}
 
 	private void runScunner() {
-		mongoLayer.createCollection(OTC_STOCK_COLLECTION);
-		mongoLayer.createCollection(OTC_STOCK_MOVEMENT);
-		mongoLayer.createCollection(OTC_STOCK_ACTIVITY);
-
+		
 		/*
 		 * //System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
 		 * System.out.println("Run Activ stock scan: " + DateUtils.getLastDateTime());
@@ -129,7 +114,7 @@ public class StockScunner {
 		client.get(443, url, uri)
 				// .addQueryParam("market", "10")
 				.addQueryParam("pageSize", "100000").ssl(true).send()
-				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString()), OTC_STOCK_COLLECTION))
+				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString()), MongoCollections.OTC_STOCK_COLLECTION))
 				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
 	}
 
@@ -142,7 +127,7 @@ public class StockScunner {
 		WebClient client = WebClient.create(AppConfig.vertx);
 
 		client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send()
-				.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), OTC_STOCK_ACTIVITY))
+				.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), MongoCollections.OTC_STOCK_ACTIVITY))
 				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
 	}
 
@@ -152,7 +137,7 @@ public class StockScunner {
 	 */
 	public void setStock(JsonObject stockBody, String dbCollection) {
 		Map<String, JsonObject> dbStockMap = new HashMap<String, JsonObject>();
-		Single<List<JsonObject>> dbStocks = mongoLayer.find(dbCollection);
+		Single<List<JsonObject>> dbStocks = MongoCollections.mongoLayer.find(dbCollection);
 		dbStocks.subscribe(dbStockList -> {
 			dbStockList.forEach(dbStockItem -> {
 				dbStockMap.put(dbStockItem.getString("_id"), dbStockItem);
@@ -181,7 +166,7 @@ public class StockScunner {
 				JsonObject dbStock = dbStockMap.get(stockId);
 				if (dbStock == null) {
 					System.out.println("There is a new stock.... ");
-					mongoLayer.insertingDocuments(dbCollection, stock);
+					MongoCollections.mongoLayer.insertingDocuments(dbCollection, stock);
 				} else
 					checkStockCheng(stock, dbStock, dbCollection);
 
@@ -197,8 +182,8 @@ public class StockScunner {
 
 		if (diff != 0) {
 			System.out.println("There is an update for stock: "+ dbStock.getString("_id") +" - "+ diff);
-			mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
-			if (dbCollection != OTC_STOCK_COLLECTION)
+			MongoCollections.mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
+			if (dbCollection != MongoCollections.OTC_STOCK_COLLECTION)
 				buySellStock(stock, diff);
 		}
 
@@ -210,7 +195,7 @@ public class StockScunner {
 	 * @param diff
 	 */
 	private void buySellStock(JsonObject stock, double diff) {
-		Single<JsonObject> movementStock = mongoLayer.findById(OTC_STOCK_MOVEMENT, stock.getString("_id"));
+		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT, stock.getString("_id"));
 		movementStock.subscribe(mStock -> {
 			if (mStock == null)
 				updateMovmentStock(stock, diff, mStock, null);
@@ -235,7 +220,7 @@ public class StockScunner {
 
 	private void updateMovmentStock(JsonObject stock, double diff, JsonObject mStock, String newAction) {
 		String updateTime = DateUtils.getLastDateTime();
-		Single<JsonObject> movementStock = mongoLayer.findById(OTC_STOCK_MOVEMENT, stock.getString("_id"));
+		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT, stock.getString("_id"));
 
 		try {
 			mStock = mStock == null ? new JsonObject() : mStock;
@@ -261,9 +246,9 @@ public class StockScunner {
 			historyUpdate.add(updateSetock);
 			mStock.put("history", historyUpdate);
 			if (historyUpdate.size() > 1)
-				mongoLayer.replaceDocuments(OTC_STOCK_MOVEMENT, mStock, stock.getString("_id"));
+				MongoCollections.mongoLayer.replaceDocuments(MongoCollections.OTC_STOCK_MOVEMENT, mStock, stock.getString("_id"));
 			else
-				mongoLayer.insertingDocuments(OTC_STOCK_MOVEMENT, mStock);
+				MongoCollections.mongoLayer.insertingDocuments(MongoCollections.OTC_STOCK_MOVEMENT, mStock);
 		} catch (Exception e) {
 			MessageLog.logError(MessageKey.STOCK_MOVEMENT_ERROR, e, logger);
 		}

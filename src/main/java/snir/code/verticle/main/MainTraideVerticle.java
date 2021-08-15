@@ -3,17 +3,17 @@ package snir.code.verticle.main;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sun.tools.classfile.StackMap_attribute.stack_map_frame;
-
 import io.vertx.core.AbstractVerticle;
 import snir.code.config.AppConfig;
 import snir.code.config.MessageConfig.MessageKey;
 import snir.code.db.MongoLayer;
 import snir.code.services.CommonService;
 import snir.code.services.MainService;
-import snir.code.services.otcmarkets.StockScreener;
+import snir.code.services.otcmarkets.SearchStocksDb;
+import snir.code.services.otcmarkets.StockScunner;
 import snir.code.services.otcmarkets.StocksNews;
 import snir.code.utils.MessageLog;
+import snir.code.utils.MongoCollections;
 
 
 public final class MainTraideVerticle extends MainAbstractVerticle {
@@ -21,14 +21,17 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
 	private CommonService commonService;
 	private MainService mainService;
-	private StockScreener stockScreener;
+	private StockScunner stockScreener;
 	private StocksNews stocksNews;
+	private SearchStocksDb searchStocks;
 	
 	@Override
 	protected void loadRouter() throws Exception {
 		System.out.println("rout to ok.....");	
 		router.get("/ok").handler(mainService::getOK);
 		router.get("/stock").handler(stockScreener::getStock);
+		router.get("/stock/search/:id").handler(searchStocks::searchBySymbol);
+		router.get("/stock/search/like/:regex").handler(searchStocks::searchByLike);
 		
 		initSubVerticles();
 	}
@@ -36,15 +39,17 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 	@Override
 	protected void loadComponents() throws Exception {
 		
-		MongoLayer.getInstance("mongo", instance->{
-			mongoLayer = instance;
+		MongoLayer.getInstance(AppConfig.AppParameters.get("APP"), instance->{
+			new MongoCollections(instance);
+			commonService = new CommonService();
+			MessageLog.logMessage(MessageKey.OK,"Init completed", logger);
+			
+			mainService = new MainService();
+			stockScreener = new StockScunner();
+			stocksNews = new StocksNews();
+			searchStocks = new SearchStocksDb();
 		});
-		commonService = new CommonService();
-		MessageLog.logMessage(MessageKey.OK,"Init completed", logger);
 		
-		mainService = new MainService();
-		stockScreener = new StockScreener();
-		stocksNews = new StocksNews();
 		
 	}
 
@@ -73,6 +78,7 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 			//AppConfig.AppParameters.put("MONGO", "mongo-local");
 			AppConfig.AppParameters.put("MONGO", "mongo-atlas");
 			AppConfig.AppParameters.put("MONGO_PORT", "8087");;
+			AppConfig.setArgs(args);
 			System.out.println("Found Vertical: " + ctClass.getName());			
 			AppConfig.runVerticle(verticle);
 		} catch (Exception e) {
