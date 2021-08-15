@@ -24,7 +24,7 @@ public class StocksNews {
 	public static String OTC_NEWS_COLLECTION = "OTC_Stock_News";
 	public static String OTC_STOCK_FINANCIAL_REPORTS = "OTC_Stock_Report";
 	public static String OTC_STOCK_SEC_FILINGS = "OTC_Stock_Sec_Filing";
-	private static long PERIODIC = 60000 * 10;
+	private static long PERIODIC = 60000 * 1;
 	private String STOCK_LIST_TAG_NAME = "records";
 
 	public StocksNews() {

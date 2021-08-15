@@ -52,6 +52,7 @@ public class SearchStocksDb {
 		
 		JsonObject otcNewsCollection = new JsonObject();
 		otcNewsCollection.put("title", "");
+		
 		searchCollectionsQueries.put(StocksNews.OTC_NEWS_COLLECTION, otcNewsCollection);
 		
 		searchCollectionsQueries.put(StocksNews.OTC_STOCK_FINANCIAL_REPORTS, new JsonObject().put("title", ""));
@@ -111,6 +112,9 @@ public class SearchStocksDb {
 			JsonObject queryObject) {
 		Single<List<JsonObject>> results= mongoLayer.find(collection, queryObject);
 		results.subscribe(allResults -> {
+			allResults.forEach(result->{
+				result.remove("history");
+			});
 			searchResultObject.put(collection, allResults);
 			if(searchResultObject.size() == searchCollectionsQueries.size())
 				MessageLog.sendMessageObject(ctx, MessageKey.STOCK_SEARCH_RESULT, searchResultObject, logger);

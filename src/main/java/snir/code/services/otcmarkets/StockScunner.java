@@ -29,7 +29,7 @@ public class StockScunner {
 	public static String OTC_STOCK_COLLECTION = "OTC_Stock";
 	public static String OTC_STOCK_MOVEMENT = "OTC_Stock_Movement";
 	public static String OTC_STOCK_ACTIVITY = "OTC_Stock_Activities";
-	private static long PERIODIC = 60000 * 7;
+	private static long PERIODIC = 60000 * 11;
 	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
 	public StockScunner() {
@@ -171,7 +171,7 @@ public class StockScunner {
 
 		AtomicReference<Integer> counter = new AtomicReference<>(1);
 		stockBody.getJsonArray(STOCK_LIST_TAG_NAME.get(dbCollection)).forEach(item -> {
-			int delay = counter.getAndUpdate(value -> value + 1);
+			int delay = counter.getAndUpdate(value -> value + 10);
 			AppConfig.vertx.setTimer(delay, l -> {
 				JsonObject stock = (JsonObject) item;
 				String stockId = stock.getString("symbol");
