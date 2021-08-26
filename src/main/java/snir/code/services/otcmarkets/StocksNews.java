@@ -18,7 +18,7 @@ public class StocksNews {
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
 	
 	
-	private static long PERIODIC = 60000 * 5;
+	private static long PERIODIC = 60000 * 2;
 	private String STOCK_LIST_TAG_NAME = "records";
 
 	public StocksNews() {
@@ -26,12 +26,11 @@ public class StocksNews {
 	}
 
 	private void runScunPeriodic() {
-		
-		AppConfig.vertx.setPeriodic(PERIODIC, new Handler<Long>() {
+		//scanNewsStocks("/otcapi/company/dns/tier/news", MongoCollections.OTC_NEWS_COLLECTION);
+		AppConfig.vertx.setPeriodic(PERIODIC + 40000, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
-				System.out.println("Run News stock scan: " + DateUtils.getLastDateTime());
 
 				scanNewsStocks("/otcapi/company/dns/tier/news", MongoCollections.OTC_NEWS_COLLECTION);
 
@@ -39,11 +38,10 @@ public class StocksNews {
 
 		});
 
-		AppConfig.vertx.setPeriodic(PERIODIC + 2000, new Handler<Long>() {
+		AppConfig.vertx.setPeriodic(PERIODIC + 20000, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
-				System.out.println("Run sec-filings stock scan: " + DateUtils.getLastDateTime());
 
 				scanNewsStocks("/otcapi/company/sec-filings", MongoCollections.OTC_STOCK_SEC_FILINGS);
 
@@ -51,7 +49,7 @@ public class StocksNews {
 
 		});
 
-		AppConfig.vertx.setPeriodic(PERIODIC + 4000, new Handler<Long>() {
+		AppConfig.vertx.setPeriodic(PERIODIC + 90000, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
@@ -70,9 +68,13 @@ public class StocksNews {
 		String uri = activity;
 		WebClient client = WebClient.create(AppConfig.vertx);
 
-		client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send()
-				.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), dbCollection))
-				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
+		try {
+			client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send()
+					.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), dbCollection))
+					.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
+		} catch (Exception e) {
+			MessageLog.logError(MessageKey.GET_STOCK_ERROR, "Response from ORC mite be null ", logger, e);
+		}
 
 	}
 
@@ -89,6 +91,8 @@ public class StocksNews {
 				if (dbStock == null) { 
 					System.out.println("There is a new stock news.... "+stockId);
 					MongoCollections.mongoLayer.insertingDocuments(dbCollection, stock);
+					String newsMessage = stock.getString("title") != null ? stock.getString("title") : stock.getString("secFileNo");
+					addNewsAlert(stock.getString("_id"), newsMessage, dbCollection );
 				}
 				else {
 					checkStockCheng(stock, dbStock, dbCollection);
@@ -113,19 +117,20 @@ public class StocksNews {
 			MongoCollections.mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
 			
 			String newsMessage = stock.getString("title") != null ? stock.getString("title") : stock.getString("secFileNo");
-			addNewsAlert(stock.getString("_id"), newsMessage );
+			addNewsAlert(stock.getString("_id"), newsMessage, dbCollection );
 		}
 		
 		
 	}
 
-	private void addNewsAlert(String id, String newsMessage) {
-		JsonObject newsAlertObj = new JsonObject();
-		newsAlertObj.put("_id", id);
-		newsAlertObj.put("title", newsMessage);
+	private void addNewsAlert(String id, String newsMessage, String dbCollection) {
 		
 		Single<JsonObject> searchResult = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_COLLECTION, id);
 		searchResult.subscribe(result -> {
+			JsonObject newsAlertObj = new JsonObject();
+			newsAlertObj.put("sorce", dbCollection);
+			newsAlertObj.put("symbol", id);
+			newsAlertObj.put("title", newsMessage);
 			newsAlertObj.put("market", result.getString("market"));
 			newsAlertObj.put("price", result.getDouble("price"));
 			newsAlertObj.put("volume", result.getDouble("volume"));

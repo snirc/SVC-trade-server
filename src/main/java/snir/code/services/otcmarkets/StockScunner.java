@@ -26,19 +26,19 @@ import snir.code.utils.MongoCollections;
 public class StockScunner {
 
 	private Logger logger = LoggerFactory.getLogger(this.getClass());
-	
-	private static long PERIODIC = 60000 * 11;
+
+	private static long PERIODIC = 60000 * 3;
 	private Map<String, String> STOCK_LIST_TAG_NAME = new HashMap();
 
 	public StockScunner() {
 
 		STOCK_LIST_TAG_NAME.put(MongoCollections.OTC_STOCK_COLLECTION, "stocks");
 		STOCK_LIST_TAG_NAME.put(MongoCollections.OTC_STOCK_ACTIVITY, "records");
-		 runScunner();
+		runScunner();
 	}
 
 	private void runScunner() {
-		
+
 		/*
 		 * //System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
 		 * System.out.println("Run Activ stock scan: " + DateUtils.getLastDateTime());
@@ -46,53 +46,53 @@ public class StockScunner {
 		 * scanActivityStocks("/otcapi/market-data/advancers/current");
 		 * scanActivityStocks("/otcapi/market-data/decliners/current");
 		 */
-		
+
 		AppConfig.vertx.setPeriodic(PERIODIC, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
 				System.out.println("Run Activ stock scan: " + DateUtils.getLastDateTime());
-				//runStockScan();
+				// runStockScan();
 				scanActivityStocks("/otcapi/market-data/active/current");
-				
+
 			}
-			
+
 		});
-		
-		AppConfig.vertx.setPeriodic(PERIODIC+2000, new Handler<Long>() {
+
+		AppConfig.vertx.setPeriodic(PERIODIC + 2000, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
 				System.out.println("Run advancers stock scan: " + DateUtils.getLastDateTime());
-				
+
 				scanActivityStocks("/otcapi/market-data/advancers/current");
-				
+
 			}
-			
+
 		});
-		
-		AppConfig.vertx.setPeriodic(PERIODIC+4000, new Handler<Long>() {
+
+		AppConfig.vertx.setPeriodic(PERIODIC + 4000, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
 				System.out.println("Run decliners stock scan: " + DateUtils.getLastDateTime());
-				
+
 				scanActivityStocks("/otcapi/market-data/decliners/current");
-				
+
 			}
-			
+
 		});
 
-		AppConfig.vertx.setPeriodic(PERIODIC*4, new Handler<Long>() {
+		AppConfig.vertx.setPeriodic(PERIODIC * 7, new Handler<Long>() {
 
 			@Override
 			public void handle(Long aLong) {
 				System.out.println("Run stock scan: " + DateUtils.getLastDateTime());
-				//runStockScan();
+				// runStockScan();
 				runStockScan();
-				
+
 			}
-			
+
 		});
 	}
 
@@ -114,7 +114,8 @@ public class StockScunner {
 		client.get(443, url, uri)
 				// .addQueryParam("market", "10")
 				.addQueryParam("pageSize", "100000").ssl(true).send()
-				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString()), MongoCollections.OTC_STOCK_COLLECTION))
+				.onSuccess(response -> setStock(getStockAsJson(response.bodyAsString()),
+						MongoCollections.OTC_STOCK_COLLECTION))
 				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
 	}
 
@@ -126,8 +127,8 @@ public class StockScunner {
 		String uri = activity;
 		WebClient client = WebClient.create(AppConfig.vertx);
 
-		client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send()
-				.onSuccess(response -> setStock(new JsonObject(response.bodyAsString()), MongoCollections.OTC_STOCK_ACTIVITY))
+		client.get(443, url, uri).addQueryParam("page", "1").addQueryParam("pageSize", "50").ssl(true).send().onSuccess(
+				response -> setStock(new JsonObject(response.bodyAsString()), MongoCollections.OTC_STOCK_ACTIVITY))
 				.onFailure(err -> MessageLog.logError(MessageKey.GET_STOCK_ERROR, err.getMessage(), logger));
 	}
 
@@ -181,7 +182,7 @@ public class StockScunner {
 		double diff = stockPrice - dbStockPrice;
 
 		if (diff != 0) {
-			System.out.println("There is an update for stock: "+ dbStock.getString("_id") +" - "+ diff);
+			System.out.println("There is an update for stock: " + dbStock.getString("_id") + " - " + diff);
 			MongoCollections.mongoLayer.replaceDocuments(dbCollection, stock, stock.getString("_id"));
 			if (dbCollection != MongoCollections.OTC_STOCK_COLLECTION)
 				buySellStock(stock, diff);
@@ -195,7 +196,8 @@ public class StockScunner {
 	 * @param diff
 	 */
 	private void buySellStock(JsonObject stock, double diff) {
-		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT, stock.getString("_id"));
+		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT,
+				stock.getString("_id"));
 		movementStock.subscribe(mStock -> {
 			if (mStock == null)
 				updateMovmentStock(stock, diff, mStock, null);
@@ -220,7 +222,8 @@ public class StockScunner {
 
 	private void updateMovmentStock(JsonObject stock, double diff, JsonObject mStock, String newAction) {
 		String updateTime = DateUtils.getLastDateTime();
-		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT, stock.getString("_id"));
+		Single<JsonObject> movementStock = MongoCollections.mongoLayer.findById(MongoCollections.OTC_STOCK_MOVEMENT,
+				stock.getString("_id"));
 
 		try {
 			mStock = mStock == null ? new JsonObject() : mStock;
@@ -234,7 +237,7 @@ public class StockScunner {
 					: mStock.getJsonArray("history");
 			JsonObject updateSetock = new JsonObject();
 			updateSetock.put("price", stock.getDouble("price"));
-		//	updateSetock.put("volumeChange", stock.getDouble("volumeChange"));
+			// updateSetock.put("volumeChange", stock.getDouble("volumeChange"));
 			updateSetock.put("AppMovement", diff);
 			updateSetock.put("updated", updateTime);
 			updateSetock.put("updatedMill", System.currentTimeMillis());
@@ -246,12 +249,32 @@ public class StockScunner {
 			historyUpdate.add(updateSetock);
 			mStock.put("history", historyUpdate);
 			if (historyUpdate.size() > 1)
-				MongoCollections.mongoLayer.replaceDocuments(MongoCollections.OTC_STOCK_MOVEMENT, mStock, stock.getString("_id"));
+				MongoCollections.mongoLayer.replaceDocuments(MongoCollections.OTC_STOCK_MOVEMENT, mStock,
+						stock.getString("_id"));
 			else
 				MongoCollections.mongoLayer.insertingDocuments(MongoCollections.OTC_STOCK_MOVEMENT, mStock);
+			
+			addNewsAlert(stock, diff);
 		} catch (Exception e) {
 			MessageLog.logError(MessageKey.STOCK_MOVEMENT_ERROR, e, logger);
 		}
+
+	}
+
+	private void addNewsAlert(JsonObject stock, double diff) {
+		JsonObject newsAlertObj = new JsonObject();
+		newsAlertObj.put("sorce", MongoCollections.OTC_STOCK_ACTIVITY);
+		newsAlertObj.put("symbol", stock.getString("_id"));
+		newsAlertObj.put("market", stock.getString("tierName"));
+		newsAlertObj.put("tradeCount", stock.getString("tradeCount"));
+		newsAlertObj.put("price", stock.getString("price"));
+		newsAlertObj.put("dollarVolume", stock.getString("dollarVolume"));
+		newsAlertObj.put("AppMovement", diff);
+		
+		
+		newsAlertObj.put("updated", DateUtils.getLastDateTime());
+		// newsAlertObj.put("updatedMill", System.currentTimeMillis());
+		MongoCollections.mongoLayer.insertingDocuments(MongoCollections.OTC_STOCK_NEWS_ALERTS, newsAlertObj);
 
 	}
 

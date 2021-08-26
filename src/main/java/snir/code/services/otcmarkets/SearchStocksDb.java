@@ -6,12 +6,11 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import rx.Single;
-import snir.code.config.AppConfig;
 import snir.code.config.MessageConfig.MessageKey;
-import snir.code.db.MongoLayer;
 import snir.code.utils.MessageLog;
 import snir.code.utils.MongoCollections;
 
@@ -54,25 +53,36 @@ public class SearchStocksDb {
 
 
 
-	public void searchBySymbol(RoutingContext ctx) {
+	public void getStocksAlerts(RoutingContext ctx) {
 		
+		MongoCollections.mongoLayer.findSortByParams(MongoCollections.OTC_STOCK_NEWS_ALERTS, new JsonObject(), ctx, -1, "updated", 30);
+		
+	}
+
+	public void searchBySymbol(RoutingContext ctx) {
+		JsonArray searchResultArr = new JsonArray();
 		JsonObject searchResultObject = new JsonObject();
 		searchCollections.forEach(collection -> {
-			searchBySymbol(ctx, searchResultObject, collection);	
+			searchBySymbol(ctx, searchResultObject,searchResultArr, collection);	
 		});
 		
 		
 	}
 
-
-
-	public void searchBySymbol(RoutingContext ctx, JsonObject searchResultObject, String collection) {
+	public void searchBySymbol(RoutingContext ctx, JsonObject searchResultObject, JsonArray searchResultArr, String collection) {
 		
 		Single<JsonObject> searchResult = MongoCollections.mongoLayer.findById(collection, ctx.pathParam("id"));
 		searchResult.subscribe(result -> {
+			JsonObject collectionResult = new JsonObject();
+			collectionResult.put(collection, result);
 			searchResultObject.put(collection, result);
-			if(searchResultObject.size() == searchCollections.size())
-				MessageLog.sendMessageObject(ctx, MessageKey.STOCK_SEARCH_RESULT, searchResultObject, logger);
+			searchResultArr.add(searchResultObject);
+			if(searchResultObject.size() == searchCollections.size()) {
+				JsonObject outResult = new JsonObject();
+				outResult.put("result", searchResultArr);
+				MessageLog.sendMessageObject(ctx, MessageKey.STOCK_SEARCH_RESULT, outResult, logger);
+			}
+				
 		});
 		
 	}

@@ -32,6 +32,7 @@ public final class MainTraideVerticle extends MainAbstractVerticle {
 		router.get("/stock").handler(stockScreener::getStock);
 		router.get("/stock/search/:id").handler(searchStocks::searchBySymbol);
 		router.get("/stock/search/like/:regex").handler(searchStocks::searchByLike);
+		router.get("/stock/alerts").handler(searchStocks::getStocksAlerts);
 		
 		initSubVerticles();
 	}
